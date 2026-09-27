@@ -179,4 +179,33 @@ print(requests.post(url, json={"base64": b64}, timeout=30).text)
 
 ---
 
+## 十二、附录：本机 → GitHub 推送（api.github.com REST 方式）
+
+部分网络环境（如某些沙箱 / 内网）**直连 `github.com` 的 git 协议会被拦截**（返回 502），但 `api.github.com` 通常可达。本项目附带 `push_api.py`，改用 **GitHub REST API**（blobs → tree → commit → 更新 ref）代替 `git push`，无需本地装 git 也能把代码推上去。
+
+### 前置条件
+- 一个对目标仓库有**写入权限**的 GitHub Personal Access Token（Classic 勾 `repo`；或 Fine-grained 指定该仓库的 Contents 读写）。
+- Python 3（脚本只用标准库 `urllib`，无第三方依赖）。
+
+### 推送内容
+脚本把本目录 `ocr-api-fc/` 的 5 个文件推到仓库的 **`fc/` 子目录** 与 **根目录** 各一份（根目录副本便于把仓库根直接当部署入口）：
+`app.py` / `requirements.txt` / `bootstrap` / `Dockerfile` / `README.md`。
+
+> 想只推 `fc/` 单一目录、或推到别的路径，改 `push_api.py` 里的 `FILES` 映射即可。
+
+### 用法
+```bash
+# 1. 把脚本顶部的 OWNER / REPO 常量改成你的仓库（默认 PediyCCDebuger/ocr-api）
+# 2. 通过环境变量传入 token —— 绝不写进任何文件
+GH_TOKEN=github_pat_xxx python push_api.py
+```
+脚本自动完成：取 `main` 最新 commit → 为每个文件建 blob → 合成 tree（**保留仓库其他已有文件**）→ 建 commit → fast-forward `main`。结尾打印最终 commit SHA 和仓库地址。
+
+### 安全注意事项
+- token **只经命令行环境变量传入**；`push_api.py` 内部也不会把 token 回显（错误信息里会替换成 `<TOKEN>`）。
+- 推送完建议到 GitHub 后台 **Revoke** 该 token，或确认它到期时间合理、且只限定本仓库。
+- 若返回 `401 Bad credentials`：常见原因是 token **被截断 / 复制不全**（GitHub PAT 通常 70+ 字符），请整串重发再试；也可能是 token 已失效，需重新生成。
+
+---
+
 *部署记录归档：本项目从「本地 FastAPI」→「Neocities 静态页（ddddocr-node WASM）」→「Render / HuggingFace / Zeabur（均因信用卡或国内不可达放弃）」→ 最终落地「阿里云函数计算 FC Web 函数（自定义运行时 + Python310 层）」。代码可自行托管到你自己的 GitHub 仓库。*
