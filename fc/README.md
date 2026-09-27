@@ -1,95 +1,182 @@
-# ddddocr OCR API · 阿里云函数计算（FC）部署包
+# ddddocr OCR API · 阿里云函数计算（FC）部署包 & 完整留档
 
-把 `https://api.nn.ci/ocr/b64/text` 平替成你自己的**免运维、按量付费、国内直连**的在线验证码识别接口。
-代码基于 FastAPI，监听 `0.0.0.0:9000`（FC 自定义运行时默认端口）。
+一份把 `https://api.nn.ci/ocr/b64/text` 平替成**你自己可控、免运维、按量付费、国内直连**的在线验证码识别接口的部署包。
+代码基于 FastAPI + ddddocr，对外暴露与 nn.ci 完全一致的接口。
 
-## 目录内容
+> 适用场景：自动识别视频网站搜索时弹出的**数字验证码**。调用方式与你原来完全一致——
+> 把 `https://api.nn.ci/ocr/b64/text` 换成 `https://<你的地址>/ocr/b64/text`，数字验证码加 `?digits=1` 更准。
+
+---
+
+## 一、目录内容
 
 | 文件 | 作用 |
 |------|------|
 | `app.py` | FastAPI 服务，核心接口 `POST /ocr/b64/text`（与 nn.ci 同路径、同返回） |
-| `requirements.txt` | 依赖：fastapi / uvicorn / ddddocr |
-| `bootstrap` | FC 自定义运行时启动脚本（不配置启动命令时的默认入口） |
-| `Dockerfile` | 自定义容器镜像（依赖太大时的稳妥方案） |
+| `requirements.txt` | 依赖：`fastapi` / `uvicorn` / `ddddocr` / `python-multipart` |
+| `bootstrap` | FC 自定义运行时启动脚本（冷启动时自动装依赖 + 启动 app） |
+| `Dockerfile` | 自定义容器镜像方案（依赖太大 / 非杭州地域时的备选，见下方说明） |
 | `README.md` | 本文件 |
 
-> 调用方式与你原来完全一致：把 `https://api.nn.ci/ocr/b64/text`
-> 换成 `https://<你的FC域名>/ocr/b64/text`，数字验证码加 `?digits=1` 更准。
+---
+
+## 二、接口说明
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/ocr/b64/text` | POST | 传 base64 返回纯文本。请求体支持：纯 base64 字符串 / JSON `{"base64": "..."}` 或 `{"image":"..."}` / data URL `data:image/png;base64,...`。可选参数 `?digits=1` 仅保留 0–9 |
+| `/ocr/file` | POST | `multipart/form-data` 上传文件，便于 curl / 网页手动测试 |
+| `/` | GET | 简易网页表单，手动上传图片看结果 |
+| `/health` | GET | 健康检查，返回 `{"status":"ok"}` |
+
+`app.py` 监听 `0.0.0.0:${PORT:-9000}`（FC 自定义运行时默认端口 9000）。
 
 ---
 
-## 方案一（推荐）：Function AI / Web 函数，云端自动装依赖，免 Docker、免本机 pip
+## 三、本地运行
 
-适合你这种场景：**不用在自己电脑装 onnxruntime**，FC 在云端构建时自动 `pip install`。
-只需上传 `app.py` 和 `requirements.txt` 两个文件。
+```bash
+pip install -r requirements.txt
+python app.py
+# 访问 http://127.0.0.1:9000
+```
 
-1. **开通函数计算**：登录 [阿里云函数计算控制台](https://fc.console.aliyun.com/) → 按提示开通（顺手领取「新用户试用额度」）。
-2. **进入函数智能**：左侧导航栏点 **「函数智能」**（即原来的 Function AI，阿里云改了中文名）→ 选「项目」→ 新建项目（空白项目）→ 项目内「新建服务」→ 选 **Web 服务**。
-3. **配置服务**（关键项）：
-   - 运行环境 / 构建环境：都选 **Python**（两者一致）。
-   - **构建命令**：`pip install -t . -r requirements.txt`（FC 在云端把依赖装到代码目录，**不用你本机装 onnxruntime**）。
-   - **启动命令**：`python3 app.py`。
-   - **监听端口**：`9000`。
-   - 代码包路径 / 执行路径：根目录 `.`（即 `app.py`、`requirements.txt` 放在工程根）。
-4. **上传代码**：把本目录里的 `app.py` 和 `requirements.txt` 上传；或「绑定 GitHub」连仓库 `PediyCCDebuger/ocr-api`（入口文件已在**仓库根目录**，直接连即可，不用进 `fc/` 子目录）。
-5. **预览 & 部署**：点「预览&部署」→ 确认资源 → 部署。等待构建（约 2–5 分钟，要装 ddddocr + onnxruntime）。
-6. **拿到地址**：部署完成后在「服务情况」拿到 API 公网地址（形如 `https://<随机>.cn-hangzhou.fcapp.run`）。
-   - 若只想用 API、不在浏览器打开，直接用该**服务公网地址**即可，无需绑定自定义域名。
-   - 若要在浏览器直接打开页面，可用平台临时测试域名（仅 HTTP）。
-
-> ⚠️ **代码包体积提醒**：ddddocr 依赖（onnxruntime + opencv 等）解压后约 200–400MB。
-> 请务必在**杭州地域（cn-hangzhou）**创建（代码包上限 500MB）；其他地域上限仅 100MB，会超限。
-> 如果确实要用非杭州地域，请改用下方的「自定义容器」方案。
-
-> ⚠️ **HTTP 触发器鉴权**：在触发器配置里把「认证方式」设为 **无需认证（anonymous）**，
-> 这样你用 Python `requests.post` 调用时才不用做签名。若设为需认证，调用需带 FC 签名头。
+本地仅用于调试；正式服务走下面的 FC 云端部署。
 
 ---
 
-## 方案二：自定义容器镜像（依赖太大 / 非杭州地域时最稳）
+## 四、阿里云 FC 部署（已实测可行的路径）
 
-镜像上限 10GB，彻底绕开代码包体积限制，且自带完整运行环境。
+> ⚠️ 入口很重要：别进左侧「函数智能」下面的 **AgentRun / FunModel / FunArt**（那是给 AI Agent、大模型、文生图用的，跑不了你的 FastAPI）。
+> 正确入口是：**函数计算控制台 → 左侧「函数管理 → 函数列表」（部分账号显示为「云函数」）→ 创建函数 → 选 Web 函数**。
 
-1. 安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/)。
-2. 在阿里云「容器镜像服务 ACR」创建**个人版实例**和一个仓库（如 `ocr-api`）。
-3. 在本目录构建并推送镜像（需先 `docker login` 到你的 ACR  registry）：
-   ```bash
-   docker build -t registry.cn-hangzhou.aliyuncs.com/<命名空间>/ocr-api:latest .
-   docker push registry.cn-hangzhou.aliyuncs.com/<命名空间>/ocr-api:latest
-   ```
-4. 函数计算控制台 → 创建函数 → 选 **Web 函数 / 自定义镜像** → 选上面推送的镜像，
-   监听端口填 `9000`，HTTP 触发器认证方式选「无需认证」。
+### 0. 前提
+- 开通函数计算，顺手领「新用户试用额度」。
+- **地域务必选「华东1·杭州（cn-hangzhou）」**：代码包上限 500MB（ddddocr + onnxruntime 解压后约 200–400MB）；其他地域仅 100MB 会超限。
+
+### 1. 创建函数（Web 函数 + 自定义运行时）
+- 创建方式：**使用自定义运行时创建**
+- 函数类型：**Web 函数**
+- 函数名：`ocr-api`
+- 运行时：**Custom Runtime**（Debian 10）
+- **代码上传方式**：通过 ZIP 包上传 → 上传本目录打好的 `ocr-api-fc.zip`
+- **启动命令**：`bash bootstrap`
+- **监听端口**：`9000`
+- **内存规格**：建议 `1 GB`（ddddocr 加载模型需要内存；0.5GB 也能跑，OOM 就调大）
+- **磁盘**：`10 GB`（关键，见踩坑 3；默认偏小装不下依赖）
+- **最小实例数**：先填 `0`（按需计费，最省）
+
+### 2. 添加 Python 公共层（最关键，否则装不上依赖）
+- 函数详情 → **配置** → **层** → 添加官方公共层 → 选 **`Python 3.10 Runtime`**（兼容 Custom.Debian10）。
+- 不选 `Python 3.10 OSS`（那是 OSS SDK）和 `Python 3.10 Package Collection`。
+- `bootstrap` 会自动优先使用 `/opt/python3.10`，不再用系统自带的 3.7。
+
+### 3. 触发器改为「无需认证」
+- 函数详情 → **配置** → **触发器** → 编辑 HTTP 触发器 → **认证方式：无需认证（anonymous）**。
+- 否则你的脚本调用会被拦（报 `MissingRequiredHeader`）。
+
+### 4. 部署 & 拿地址
+- 保存/部署后，在触发器里拿 **公网访问地址**，形如：
+  `https://ocr-api-xxxx.cn-hangzhou.fcapp.run`
+- 直接 `POST /ocr/b64/text` 即可，无需再绑域名（见第八节可选绑域名）。
 
 ---
 
-## 部署后验证
+## 五、踩坑记录（都是实打实解决过的，下次照着避）
 
-拿到地址后，用你原来调 nn.ci 的方式测试：
+| # | 现象 | 根因 | 解决 |
+|---|------|------|------|
+| 1 | `pip` 报 `from versions: none`，一个版本都装不上 | FC 自定义运行时自带 **Python 3.7.4** 太老，fastapi/uvicorn/ddddocr 要求 3.8+ | 给函数加 **Python310 公共层**，`bootstrap` 自动用新 Python |
+| 2 | 装依赖时卡住 / 超时 | 阿里云国内环境连 `files.pythonhosted.org` 下载超时 | `bootstrap` 里已写死阿里云镜像 `-i https://mirrors.aliyun.com/pypi/simple/ --timeout 120` |
+| 3 | `OSError: [Errno 28] No space left on device` | `/code` 可写层空间不足，装不下 onnxruntime 那套 | `bootstrap` 把依赖装到 **`/tmp/pydeps`**（函数磁盘），并把函数**磁盘调到 10GB** |
+| 4 | `RuntimeError: Form data requires "python-multipart"` | `app.py` 的 `/ocr/file` 用了 `UploadFile`，FastAPI 需要该包 | 已在 `requirements.txt` 加入 `python-multipart` |
+| 5 | `MissingRequiredHeader` / 调用被拒 | HTTP 触发器默认开了签名认证 | 触发器认证方式改 **无需认证** |
+
+> 提示：以上全部已固化进 `bootstrap` 和 `requirements.txt`，**用最新 `ocr-api-fc.zip` 上传即可**，不用手改控制台（层、磁盘、触发器仍需在控制台设一次）。
+
+---
+
+## 六、bootstrap 原理（冷启动自动装依赖）
+
+FC 自定义运行时**不会**自动读 `requirements.txt` 安装依赖，所以靠 `bootstrap` 在实例冷启动时补装一次：
+1. 自动定位层里的 Python 3.10（系统 3.7 仅兜底）；
+2. 检查 `ddddocr/fastapi/uvicorn` 是否已装，没装才 `pip install -t /tmp/pydeps`（阿里云镜像）；
+3. 通过 `PYTHONPATH` 让 `app.py` 能找到 `/tmp/pydeps` 里的包；
+4. `exec python3 app.py` 启动服务。
+
+实例保活期间不会重复安装；实例缩容到 0 后下次冷启动会再装一次（约 1–3 分钟，见第九节）。
+
+---
+
+## 七、部署后验证
+
+```bash
+# 健康检查
+curl -s --max-time 120 https://<你的地址>/health
+# => {"status":"ok"}
+
+# 识别（数字验证码加 ?digits=1）
+curl -X POST "https://<你的地址>/ocr/b64/text?digits=1" \
+  -H "Content-Type: text/plain" \
+  --data "这里换成验证码图片的base64"
+```
+
+Python 调用（与你原来调 nn.ci 一致）：
 
 ```python
 import requests, base64
-
-url = "https://<你的FC域名>/ocr/b64/text?digits=1"   # 数字验证码加 ?digits=1
+url = "https://<你的地址>/ocr/b64/text?digits=1"
 b64 = base64.b64encode(open("code.png", "rb").read()).decode()
-r = requests.post(url, json={"base64": b64}, timeout=30)
-print(r.text)   # 识别出的数字
+print(requests.post(url, json={"base64": b64}, timeout=30).text)
 ```
 
-或浏览器打开 `https://<你的FC域名>/` 用网页表单手动传图测试。
+浏览器打开 `https://<你的地址>/` 也可用网页表单手动传图测试。
 
 ---
 
-## 计费与保活（重要）
+## 八、绑定自定义域名（可选，但推荐）
 
-- **按量付费，不用不花钱**：函数「最小实例数」保持默认 **0**，没有请求就不计费。
+前提：域名已在阿里云接入备案（根域与子域均需在阿里云完成备案）。自定义域名**本身免费**。
+
+1. 函数计算控制台 → **函数管理 → 域名管理**（地区选杭州）→ **添加自定义域名**，填你的子域（例如 `cf.your-domain.xyz`），记下页面给的**公网 CNAME**。
+2. **云解析 DNS** 控制台 → 给你的根域加记录：主机填子域前缀（如 `cf`）、类型 `CNAME`、值填上面的 FC CNAME。
+3. 回 FC 配**路由**：路径 `/*` → 函数 `ocr-api` → 版本 `LATEST`。
+4. **HTTPS（可选）**：可先不开启，仅用 HTTP 也能正常做程序化 API 调用（接口形如 `http://你的子域/...`）。
+   若以后想加密或浏览器访问，再去「数字证书管理服务」申请免费 DV 证书（绑定你的子域）回来选上即可。
+5. 等 DNS 生效（几分钟到几十分钟）。生效后接口变：
+   `http://你的子域/ocr/b64/text?digits=1`
+   原 `.fcapp.run` 地址仍可并用。
+
+> 注意：自定义域名只是多一条访问入口，最终仍落到原 HTTP 触发器，**触发器保持「无需认证」**。
+
+---
+
+## 九、最小实例数 & 计费
+
+- **按量付费，不用不花钱**：最小实例数保持 `0`，无请求不计费。
 - **免费额度**：每月 100 万次调用 + 40 万 CU-秒算力免费；个人刷验证码量级基本 **≈0 元/月**。
-- **冷启动**：空闲后实例回收，下次请求约 1–3 秒唤醒（首次含 ddddocr 模型加载稍慢），
-  对脚本自动识别验证码完全可用。若要常驻，可在「弹性管理」把最小实例数调为 1（会产生常驻费用）。
+- **冷启动**：空闲后实例回收，下次请求触发冷启动（含装依赖 + 加载 ddddocr 模型）约 **1–3 分钟**；保活期间很快。脚本自动识别验证码完全可用。
+- **想常驻免冷启动**：函数详情 → **弹性管理 / 弹性策略** 标签页 → 创建/编辑规则 → 基础配置里把**最小实例数设为 1**。注意：>0 会让实例 **7×24 常驻**，即使空闲也产生少量费用（闲置单价很低）。
 
 ---
 
-## 常见问题
+## 十、备选方案：自定义容器镜像（非杭州地域 / 想彻底打包依赖）
 
-- **部署后调用 502 / FunctionNotStarted**：多半是没监听 `0.0.0.0:9000`。本包已用 `0.0.0.0` 和 `${PORT:-9000}`，正常不会。
-- **代码包超限（100MB）**：换成杭州地域，或改用方案二（自定义容器）。
-- **识别不准**：数字验证码务必加 `?digits=1`；若仍是彩色干扰线极强的图，可先用 PIL 做灰度/二值化再识别。
+代码包方案依赖云端装、受冷启动影响。若想一劳永逸，可用容器镜像（上限 10GB，依赖烤进镜像、无冷启动装包）：
+
+1. 装 Docker，在阿里云「容器镜像服务 ACR」建个人版实例 + 仓库。
+2. 本目录 `docker build -t registry.cn-hangzhou.aliyuncs.com/<命名空间>/ocr-api:latest .` 并 `docker push`。
+3. 函数计算 → 创建函数 → **Web 函数 / 自定义镜像** → 选该镜像，端口 `9000`，触发器无需认证。
+
+---
+
+## 十一、常见问题
+
+- **调用 502 / FunctionNotStarted**：确认 `app.py` 监听 `0.0.0.0:9000`（本包已写 `${PORT:-9000}`，正常不会）。
+- **部署后第一次请求很慢/超时**：正常的冷启动装依赖，多等一会儿或重试。
+- **识别不准**：数字验证码务必加 `?digits=1`；干扰极强的图可先用 PIL 做灰度/二值化再识别。
+- **代码包超限（100MB）**：换杭州地域，或改用容器镜像方案。
+
+---
+
+*部署记录归档：本项目从「本地 FastAPI」→「Neocities 静态页（ddddocr-node WASM）」→「Render / HuggingFace / Zeabur（均因信用卡或国内不可达放弃）」→ 最终落地「阿里云函数计算 FC Web 函数（自定义运行时 + Python310 层）」。代码可自行托管到你自己的 GitHub 仓库。*
