@@ -195,7 +195,7 @@ print(requests.post(url, json={"base64": b64}, timeout=30).text)
 
 ### 用法
 ```bash
-# 1. 把脚本顶部的 OWNER / REPO 常量改成你的仓库（默认 PediyCCDebuger/ocr-api）
+# 1. 把脚本顶部的 OWNER / REPO 常量改成你自己的仓库（例如 <你的GitHub用户名>/ocr-api）
 # 2. 通过环境变量传入 token —— 绝不写进任何文件
 GH_TOKEN=github_pat_xxx python push_api.py
 ```
