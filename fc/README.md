@@ -24,14 +24,14 @@
 只需上传 `app.py` 和 `requirements.txt` 两个文件。
 
 1. **开通函数计算**：登录 [阿里云函数计算控制台](https://fc.console.aliyun.com/) → 按提示开通（顺手领取「新用户试用额度」）。
-2. **进入 Function AI**：左侧「Function AI」→ 新建项目（空白项目）→ 项目内「新建服务」→ 选 **Web 服务**。
+2. **进入函数智能**：左侧导航栏点 **「函数智能」**（即原来的 Function AI，阿里云改了中文名）→ 选「项目」→ 新建项目（空白项目）→ 项目内「新建服务」→ 选 **Web 服务**。
 3. **配置服务**（关键项）：
    - 运行环境 / 构建环境：都选 **Python**（两者一致）。
-   - **构建命令**：`pip install -t . -r requirements.txt`（FC 在云端把依赖装到代码目录）。
+   - **构建命令**：`pip install -t . -r requirements.txt`（FC 在云端把依赖装到代码目录，**不用你本机装 onnxruntime**）。
    - **启动命令**：`python3 app.py`。
    - **监听端口**：`9000`。
-   - 代码包路径 / 执行路径：根目录 `.`（即把 `app.py`、`requirements.txt` 放在工程根）。
-4. **上传代码**：把本目录里的 `app.py` 和 `requirements.txt` 上传（或绑定 GitHub 仓库 `PediyCCDebuger/ocr-api` 自动拉取）。
+   - 代码包路径 / 执行路径：根目录 `.`（即 `app.py`、`requirements.txt` 放在工程根）。
+4. **上传代码**：把本目录里的 `app.py` 和 `requirements.txt` 上传；或「绑定 GitHub」连仓库 `PediyCCDebuger/ocr-api`（入口文件已在**仓库根目录**，直接连即可，不用进 `fc/` 子目录）。
 5. **预览 & 部署**：点「预览&部署」→ 确认资源 → 部署。等待构建（约 2–5 分钟，要装 ddddocr + onnxruntime）。
 6. **拿到地址**：部署完成后在「服务情况」拿到 API 公网地址（形如 `https://<随机>.cn-hangzhou.fcapp.run`）。
    - 若只想用 API、不在浏览器打开，直接用该**服务公网地址**即可，无需绑定自定义域名。

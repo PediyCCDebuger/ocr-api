@@ -2,23 +2,26 @@
 # -*- coding: utf-8 -*-
 """
 ddddocr 在线 OCR API —— 1:1 平替 https://api.nn.ci/ocr/b64/text
-纯 Python + FastAPI，可一键部署到 Render / Hugging Face Spaces / 任意 Docker 平台。
+专为「阿里云函数计算 FC」改造：FastAPI + uvicorn，监听 0.0.0.0:${PORT:-9000}
+（FC 自定义运行时 / Web 函数 / Function AI 默认端口为 9000）
 
-接口：
-  POST /ocr/b64/text   与 nn.ci 同路径、同用法
+接口（与 nn.ci 完全一致）：
+  POST /ocr/b64/text   传 base64，返回纯文本
        请求体（任选其一）：
          - 纯 base64 字符串（原始文本）
          - JSON: {"base64": "...."}  或  {"image": "...."}
          - data URL: data:image/png;base64,....
        可选参数 ?digits=1  -> 仅保留 0-9（数字验证码更准）
-       返回：纯文本（识别出的字符），与 nn.ci 一致（text/plain）
   POST /ocr/file        multipart 上传文件，便于 curl / 网页手动测试
   GET  /               简易网页表单（手动上传图片看结果）
   GET  /health         健康检查 {"status":"ok"}
-  HEAD /              平台健康探针（Render 用它探活）
+  HEAD /              平台健康探针（FC 冷启动探活用）
+
+本地调试：  python app.py  然后访问 http://127.0.0.1:9000
 """
 import base64
 import json
+import os
 import re
 
 import ddddocr
@@ -32,7 +35,7 @@ try:
 except TypeError:
     _ocr = ddddocr.DdddOcr()
 
-app = FastAPI(title="ddddocr API — nn.ci 平替")
+app = FastAPI(title="ddddocr API — nn.ci 平替 (FC)")
 
 # 允许跨域，方便其他网页（如你的 Neocities 站点）直接 fetch 调用
 app.add_middleware(
@@ -48,7 +51,7 @@ PAGE = """<!doctype html>
 .m{color:#888;font-size:13px}textarea,input{width:100%;box-sizing:border-box;margin:6px 0;padding:8px}
 button{background:#2d7d5a;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer}
 pre{background:#f4f4f4;padding:12px;border-radius:6px;min-height:22px;white-space:pre-wrap;word-break:break-all}</style></head>
-<body><h2>ddddocr 在线识别（nn.ci 平替）</h2>
+<body><h2>ddddocr 在线识别（nn.ci 平替 · FC）</h2>
 <p class="m">POST /ocr/b64/text （base64→文本，?digits=1 仅数字）　POST /ocr/file（上传文件）</p>
 <input id="f" type="file" accept="image/*">
 <p><label><input type="checkbox" id="d"> 仅识别数字 (0-9)</label></p>
@@ -130,3 +133,11 @@ async def index():
 @app.head("/")
 async def head_root():
     return Response(status_code=200)
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.environ.get("PORT", "9000"))
+    # 单 worker 即可；ddddocr 为 CPU 密集型同步推理，多 worker 会增加内存占用
+    uvicorn.run("app:app", host="0.0.0.0", port=port, workers=1)

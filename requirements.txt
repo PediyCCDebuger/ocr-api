@@ -1,3 +1,9 @@
-ddddocr
+# 阿里云函数计算 FC 依赖
+# FastAPI 提供 Web 框架与路由；uvicorn 是 ASGI 服务器；ddddocr 是验证码识别引擎
+# （ddddocr 会自动拉取 onnxruntime / numpy / Pillow / opencv 等依赖）
+# 说明：在「Function AI / Web 函数」部署时，FC 会在云端自动执行
+#   pip install -t . -r requirements.txt
+# 因此你不需要在本地安装这些依赖，也不必在本机下载 onnxruntime。
 fastapi
 uvicorn
+ddddocr
